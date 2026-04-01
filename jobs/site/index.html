@@ -333,26 +333,12 @@ Respond with ONLY a JSON object in this exact format, no other text:
   </div>
 
   <div class="intro" style="margin-top: 50px; padding: 0 28px;">
-    <h2>Personalised Career Recommendation</h2>
-    <p style="margin-bottom: 16px;">To provide you with a personalised career recommendation, please enter your details below. I will analyse our current market data and salary trends to find the best-match profession for your profile.</p>
-
-    <form id="recommendation-form" style="display: flex; flex-direction: column; gap: 12px; max-width: 600px; background: rgba(0,0,0,0.3); padding: 20px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06);">
-      <label for="qual" style="font-size: 13px; color: var(--fg2);">What is your current qualification? (e.g., Bachelor’s in Data Science, MBA)</label>
-      <input type="text" id="qual" name="qual" style="padding: 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: #fff; font-size: 14px;" required/>
-
-      <label for="salary" style="font-size: 13px; color: var(--fg2);">What is your salary expectation? (e.g., ₹10–15 LPA, $80k–$100k)</label>
-      <input type="text" id="salary" name="salary" style="padding: 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: #fff; font-size: 14px;" required/>
-
-      <label for="goals" style="font-size: 13px; color: var(--fg2);">What are your future goals? (e.g., Lead a technical team, work in creative design)</label>
-      <textarea id="goals" name="goals" rows="3" style="padding: 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.2); background: transparent; color: #fff; font-size: 14px; font-family: inherit;" required></textarea>
-
-      <div style="display: flex; gap: 10px; margin-top: 10px;">
-        <button type="submit" style="flex: 1; padding: 10px; border-radius: 4px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; cursor: pointer; font-weight: 600; transition: background 0.2s;">Get Recommendation</button>
-        <button type="button" id="reset-btn" style="padding: 10px 20px; border-radius: 4px; background: transparent; border: 1px solid rgba(255,255,255,0.2); color: var(--fg2); cursor: pointer; font-weight: 600; transition: background 0.2s; display: none;">Reset</button>
-      </div>
-    </form>
-
-    <div id="recommendation-result" style="margin-top: 20px; font-size: 14px; line-height: 1.5; color: var(--fg); max-width: 600px;"></div>
+    <h2>The Future-Proof Navigator</h2>
+    <p style="margin-bottom: 24px;">Identifying "Safe Haven" occupations: High growth velocity (>7%) coupled with low automation exposure (<=3).</p>
+    
+    <div id="safe-haven-list" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px;">
+      <!-- Dynamically populated -->
+    </div>
   </div>
 </div>
 
@@ -715,6 +701,28 @@ function updateStats() {
   else updateExposureStats(totalJobs);
   
   drawMainBarChart();
+  updateSafeHavenList();
+}
+
+function updateSafeHavenList() {
+  const container = document.getElementById("safe-haven-list");
+  if (!container) return;
+  
+  const safeHavens = data
+    .filter(d => (d.outlook || 0) >= 7 && (d.exposure || 0) <= 3)
+    .sort((a, b) => (b.pay || 0) - (a.pay || 0))
+    .slice(0, 6);
+    
+  container.innerHTML = safeHavens.map(d => `
+    <div style="background: var(--input-bg); border: 1px solid var(--border); padding: 20px; border-radius: 8px; border-top: 4px solid ${greenRedCSS(0.1, 1)}; cursor: pointer;" onclick="window.open('${d.url}', '_blank')">
+      <div style="font-weight: 600; font-size: 14px; margin-bottom: 12px; color: var(--fg);">${d.title}</div>
+      <div style="display: flex; flex-direction: column; gap: 6px; font-size: 12px;">
+        <div style="display: flex; justify-content: space-between;"><span style="color: var(--fg2);">Median Pay</span><span style="font-weight: 600; color: var(--fg);">${formatPay(d.pay)}</span></div>
+        <div style="display: flex; justify-content: space-between;"><span style="color: var(--fg2);">Growth</span><span style="font-weight: 600; color: #4ade80;">+${d.outlook}%</span></div>
+        <div style="display: flex; justify-content: space-between;"><span style="color: var(--fg2);">AI Sensitivity</span><span style="font-weight: 600; color: var(--fg);">${d.exposure}/10</span></div>
+      </div>
+    </div>
+  `).join("");
 }
 
 function drawMainBarChart() {
@@ -1026,98 +1034,6 @@ fetch("data.json")
   });
 
 window.addEventListener("resize", resize);
-// ── Recommendation Engine ───────────────────────────────────────────────
-
-document.getElementById("recommendation-form").addEventListener("submit", (e) => {
-  e.preventDefault();
-  if (!data || data.length === 0) return;
-  const qual = document.getElementById("qual").value.toLowerCase();
-  const salaryStr = document.getElementById("salary").value.toLowerCase();
-  const goals = document.getElementById("goals").value.toLowerCase();
-
-  let targetSalary = 50000;
-  const kMatch = salaryStr.match(/(\d+)\s*k/);
-  if (kMatch) targetSalary = parseInt(kMatch[1]) * 1000;
-  const numMatch = salaryStr.match(/\$?(\d{2,3}),?000/);
-  if (numMatch) targetSalary = parseInt(numMatch[1]) * 1000;
-  const inrMatch = salaryStr.match(/(\d+)\s*[-to\s]*\s*(\d+)?\s*lpa/);
-  if (inrMatch) {
-    let val = parseInt(inrMatch[2]) || parseInt(inrMatch[1]);
-    targetSalary = val * 1200; // rough USD conversion for matching 1LPA ~ $1200
-  }
-
-  let bestMatches = [...data].map(d => {
-    let score = 0;
-    const edu = (d.education || "").toLowerCase();
-    
-    // Education match
-    if (qual.includes("bachelor") && edu.includes("bachelor")) score += 2;
-    if (qual.includes("master") && edu.includes("master")) score += 2;
-    if (qual.includes("mba") && edu.includes("master")) score += 2;
-    if ((qual.includes("phd") || qual.includes("doctor")) && edu.includes("doctoral")) score += 2;
-    
-    // Salary match
-    if (d.pay) {
-      const diff = Math.abs(d.pay - targetSalary);
-      if (diff < 15000) score += 3;
-      else if (diff < 30000) score += 1;
-      if (d.pay >= targetSalary) score += 1; 
-    }
-    
-    // Keyword match
-    const title = (d.title || "").toLowerCase();
-    const cat = (d.category || "").toLowerCase();
-    const rationale = (d.exposure_rationale || "").toLowerCase();
-    
-    const words = goals.split(/[\s,.-]+/).filter(w => w.length > 3);
-    for (const w of words) {
-      if (title.includes(w)) score += 3;
-      if (cat.includes(w)) score += 1;
-      if (rationale.includes(w)) score += 0.5;
-    }
-    
-    return { ...d, matchScore: score };
-  });
-
-  bestMatches.sort((a, b) => b.matchScore - a.matchScore);
-  const topMatch = bestMatches[0];
-  const runnerUps = bestMatches.slice(1, 4);
-
-  const resDiv = document.getElementById("recommendation-result");
-  
-  if (topMatch.matchScore > 2) {
-    resDiv.innerHTML = `
-      <div style="background: rgba(0, 255, 128, 0.1); border: 1px solid rgba(0, 255, 128, 0.3); padding: 15px; border-radius: 8px;">
-        <h3 style="color: #4ade80; margin-bottom: 8px;">🎯 Top Match: ${topMatch.title}</h3>
-        <p style="margin-bottom: 6px;"><b>Median Pay:</b> ${formatPay(topMatch.pay)} | <b>Required Education:</b> ${topMatch.education}</p>
-        <p style="margin-bottom: 10px;"><b>Category:</b> ${topMatch.category} | <b>Growth Outlook:</b> ${topMatch.outlook > 0 ? '+' : ''}${topMatch.outlook}%</p>
-        <p style="color: var(--fg2); font-size: 13px;"><i>Why this match?</i> It strongly aligns with your goals and salary expectations inside our 342-occupation BLS database.</p>
-        
-        <h4 style="margin-top: 15px; margin-bottom: 5px; font-size: 13px; color: var(--fg);">Great Alternatives:</h4>
-        <ul style="margin-left: 20px; font-size: 13px; color: var(--fg2);">
-           ${runnerUps.map(r => `<li><b>${r.title}</b> (${formatPay(r.pay)})` + (r.outlook > 0 ? `<span style="color:#4ade80; margin-left:6px;">+${r.outlook}% growth</span>` : "") + "</li>").join("")}
-        </ul>
-      </div>
-    `;
-  } else {
-    resDiv.innerHTML = `
-      <div style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1); padding: 15px; border-radius: 8px;">
-        <h3 style="color: #fff; margin-bottom: 8px;">Closest Match: ${topMatch.title}</h3>
-        <p style="margin-bottom: 6px;"><b>Median Pay:</b> ${formatPay(topMatch.pay)} | <b>Required Education:</b> ${topMatch.education}</p>
-        <p style="color: var(--fg2); font-size: 13px; margin-top: 8px;">We couldn't find a perfect keyword match for your specific goals, but this aligns best with your salary expectation and education level.</p>
-      </div>
-    `;
-  }
-  
-  // Show reset button
-  document.getElementById("reset-btn").style.display = "block";
-});
-
-document.getElementById("reset-btn").addEventListener("click", () => {
-  document.getElementById("recommendation-form").reset();
-  document.getElementById("recommendation-result").innerHTML = "";
-  document.getElementById("reset-btn").style.display = "none";
-});
 // ── Theme Management ──────────────────────────────────────────────────
 
 function toggleTheme() {
